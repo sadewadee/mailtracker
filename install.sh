@@ -9,6 +9,7 @@ set -e
 INSTALL_DIR="/opt/eximmon"
 SERVICE_FILE="/etc/systemd/system/eximmon.service"
 CONFIG_FILE="$INSTALL_DIR/.eximmon.conf"
+BACKUP_DIR="/opt/eximmon/backups"
 
 echo ""
 echo "╔══════════════════════════════════════════════╗"
@@ -23,12 +24,36 @@ if [ "$EUID" -ne 0 ]; then
     exit 1
 fi
 
+# Check if service is running and stop it
+SERVICE_WAS_RUNNING=false
+if systemctl is-active --quiet eximmon 2>/dev/null; then
+    SERVICE_WAS_RUNNING=true
+    echo "[1/5] Stopping eximmon service..."
+    systemctl stop eximmon
+    echo "Service stopped."
+else
+    echo "[1/5] Service not running, skipping stop."
+fi
+
+# Backup existing binary if exists
+if [ -f "$INSTALL_DIR/eximmon" ]; then
+    echo "[2/5] Backing up existing binary..."
+    mkdir -p "$BACKUP_DIR"
+    BACKUP_FILE="$BACKUP_DIR/eximmon.$(date +%Y%m%d_%H%M%S)"
+    cp "$INSTALL_DIR/eximmon" "$BACKUP_FILE"
+    echo "Backup saved: $BACKUP_FILE"
+
+    # Keep only last 5 backups
+    ls -t "$BACKUP_DIR"/eximmon.* 2>/dev/null | tail -n +6 | xargs -r rm -f
+else
+    echo "[2/5] No existing binary to backup."
+fi
+
 # Create installation directory
-echo "[1/4] Creating directory: $INSTALL_DIR"
+echo "[3/5] Installing binary..."
 mkdir -p "$INSTALL_DIR"
 
 # Copy binary
-echo "[2/4] Copying binary..."
 if [ -f "./eximmon" ]; then
     cp ./eximmon "$INSTALL_DIR/"
 elif [ -f "./bin/eximmon" ]; then
@@ -45,23 +70,13 @@ if [ -f "./eximmon.service" ]; then
     cp ./eximmon.service "$SERVICE_FILE"
 fi
 
-# Setup config
-echo "[3/4] Setup Configuration"
-echo ""
-
-# Check if config already exists
+# Setup config if not exists
+echo "[4/5] Checking configuration..."
 if [ -f "$CONFIG_FILE" ]; then
-    echo "Config already exists at $CONFIG_FILE"
-    read -p "Overwrite? (y/N): " overwrite
-    if [ "$overwrite" != "y" ] && [ "$overwrite" != "Y" ]; then
-        echo "Keeping existing config."
-    else
-        rm -f "$CONFIG_FILE"
-    fi
-fi
-
-if [ ! -f "$CONFIG_FILE" ]; then
-    echo "Please enter your configuration:"
+    echo "Config exists: $CONFIG_FILE"
+    echo "Keeping existing configuration."
+else
+    echo "No config found. Setting up..."
     echo ""
 
     # API Token (required)
@@ -103,7 +118,6 @@ if [ ! -f "$CONFIG_FILE" ]; then
 
     # Create config file
     echo ""
-    echo "Creating config file..."
     cat > "$CONFIG_FILE" << EOF
 {
   "api_token": "$API_TOKEN",
@@ -122,14 +136,27 @@ if [ ! -f "$CONFIG_FILE" ]; then
 }
 EOF
     chmod 600 "$CONFIG_FILE"
-    echo "Config saved to: $CONFIG_FILE"
+    echo "Config saved: $CONFIG_FILE"
 fi
 
-# Reload and enable systemd
-echo ""
-echo "[4/4] Installing systemd service..."
+# Reload systemd and enable
+echo "[5/5] Installing systemd service..."
 systemctl daemon-reload
 systemctl enable eximmon
+
+# Restart service if it was running before
+if [ "$SERVICE_WAS_RUNNING" = true ]; then
+    echo ""
+    echo "Restarting service..."
+    systemctl start eximmon
+    sleep 1
+    if systemctl is-active --quiet eximmon; then
+        echo "Service restarted successfully."
+    else
+        echo "Warning: Service failed to start. Check logs:"
+        echo "  journalctl -u eximmon -n 20"
+    fi
+fi
 
 echo ""
 echo "╔══════════════════════════════════════════════╗"
@@ -138,13 +165,11 @@ echo "╚═══════════════════════�
 echo ""
 echo "Install directory: $INSTALL_DIR"
 echo "Config file: $CONFIG_FILE"
+[ -d "$BACKUP_DIR" ] && echo "Backups: $BACKUP_DIR"
 echo ""
 echo "Commands:"
-echo "  systemctl start eximmon    - Start monitoring"
 echo "  systemctl status eximmon   - Check status"
+echo "  systemctl start eximmon    - Start monitoring"
 echo "  systemctl stop eximmon     - Stop monitoring"
 echo "  journalctl -u eximmon -f   - View logs"
-echo ""
-echo "Or test manually:"
-echo "  cd $INSTALL_DIR && ./eximmon config"
 echo ""
