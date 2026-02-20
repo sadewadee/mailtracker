@@ -28,14 +28,37 @@ var eximRegLine = regexp.MustCompile("(?i)(\\d{4}-\\d{2}-\\d{2} \\d{2}:\\d{2}:\\
 var notifyEmail = ""
 
 func main() {
+	// Load config from file first
+	appConfig = loadConfig()
+	if appConfig != nil {
+		applyConfigToEnv(appConfig)
+	}
+
 	logFile := "exim_mainlog"
 	whm.ApiToken = os.Getenv("API_TOKEN")
+
+	// Check if any env vars provided via CLI, merge and save to config
+	hasEnvVars := os.Getenv("API_TOKEN") != "" ||
+		os.Getenv("TELEGRAM_BOT_TOKEN") != "" ||
+		os.Getenv("SLACK_BOT_TOKEN") != "" ||
+		os.Getenv("WHM_API_HOST") != ""
+
+	if hasEnvVars {
+		appConfig = mergeEnvToConfig(appConfig)
+		if err := saveConfig(appConfig); err != nil {
+			log("Warning: %v", err)
+		}
+	}
+
 	if whm.ApiToken == "" {
-		log("Please declare -x API_TOKEN=...")
-		log("Other environments variables: MAX_PER_MIN=8 , MAX_PER_HOUR=100")
-		log("NOTIFY_EMAIL=email , EXIM_LOG=/var/log/exim_mainlog")
-		log("WHM_API_HOST=127.0.0.1")
-		log("PREFER_MODERN_UAPI=true (default: true, set to 'false' to use legacy only)")
+		log("Please declare API_TOKEN (will be saved to config file):")
+		log("  API_TOKEN=xxx ./eximmon start")
+		log("")
+		log("Other environments variables:")
+		log("  MAX_PER_MIN=8 , MAX_PER_HOUR=100")
+		log("  NOTIFY_EMAIL=email , EXIM_LOG=/var/log/exim_mainlog")
+		log("  WHM_API_HOST=127.0.0.1")
+		log("  PREFER_MODERN_UAPI=true")
 		log("")
 		log("Bot Integration:")
 		log("  TELEGRAM_BOT_TOKEN=xxx")
@@ -44,6 +67,8 @@ func main() {
 		log("  SLACK_BOT_TOKEN=xoxb-xxx")
 		log("  SLACK_ADMIN_IDS=U123,U456")
 		log("  SLACK_NOTIFY_CHANNEL=C123")
+		log("")
+		log("Config file: .eximmon.conf (permission: 600)")
 	}
 
 	// Configure UAPI preference (default: true for modern cPanel versions)
@@ -105,7 +130,7 @@ func main() {
 	}
 
 	if len(os.Args) < 2 {
-		log("args: start|run|skip|reset|suspend|unsuspend|info|help|test-notify|rerun")
+		log("args: start|run|skip|reset|suspend|unsuspend|info|config|help|test-notify|rerun")
 		return
 	}
 
@@ -189,6 +214,30 @@ func main() {
 		}
 		return
 
+	case "config":
+		// Show current config
+		if appConfig == nil {
+			log("No config file found. Run with API_TOKEN=xxx to create one.")
+			return
+		}
+		log("Current configuration:")
+		log("  API_TOKEN: %s", maskToken(appConfig.API_TOKEN))
+		log("  NOTIFY_EMAIL: %s", appConfig.NOTIFY_EMAIL)
+		log("  EXIM_LOG: %s", appConfig.EXIM_LOG)
+		log("  WHM_API_HOST: %s", appConfig.WHM_API_HOST)
+		log("  MAX_PER_MIN: %d", appConfig.MAX_PER_MIN)
+		log("  MAX_PER_HOUR: %d", appConfig.MAX_PER_HOUR)
+		log("  PREFER_MODERN_UAPI: %s", appConfig.PREFER_MODERN_UAPI)
+		log("")
+		log("Bot config:")
+		log("  TELEGRAM_BOT_TOKEN: %s", maskToken(appConfig.TELEGRAM_BOT_TOKEN))
+		log("  TELEGRAM_ADMIN_IDS: %s", appConfig.TELEGRAM_ADMIN_IDS)
+		log("  TELEGRAM_NOTIFY_CHAT_ID: %s", appConfig.TELEGRAM_NOTIFY_CHAT_ID)
+		log("  SLACK_BOT_TOKEN: %s", maskToken(appConfig.SLACK_BOT_TOKEN))
+		log("  SLACK_ADMIN_IDS: %s", appConfig.SLACK_ADMIN_IDS)
+		log("  SLACK_NOTIFY_CHANNEL: %s", appConfig.SLACK_NOTIFY_CHANNEL)
+		return
+
 	case "help":
 		log("start - continue from last position or start from yesterday, and repeats from last position")
 		log("rerun - rerun from specified date")
@@ -198,6 +247,7 @@ func main() {
 		log("suspend - suspend outgoing email")
 		log("unsuspend - unsuspend outgoing email")
 		log("info - get information of a domain")
+		log("config - show current configuration")
 		log("test-notify - test send notification mail")
 		log("help - this!")
 		return
@@ -662,5 +712,16 @@ func MustSize(path string) int64 {
 }
 
 func log(msg string, args ...interface{}) {
-	fmt.Printf("eximmon(v1.1.0):"+msg+"\n", args...)
+	fmt.Printf("eximmon(v1.2.0):"+msg+"\n", args...)
+}
+
+// maskToken masks sensitive tokens for display (shows first 4 and last 4 chars)
+func maskToken(token string) string {
+	if token == "" {
+		return "(not set)"
+	}
+	if len(token) <= 12 {
+		return "****"
+	}
+	return token[:4] + "****" + token[len(token)-4:]
 }
