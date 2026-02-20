@@ -1,0 +1,23 @@
+[Unit]
+Description=Eximmon - WHM Exim Mail Monitor
+Documentation=https://github.com/u007/eximmon
+After=network.target
+
+[Service]
+Type=simple
+User=root
+WorkingDirectory=/opt/eximmon
+ExecStart=/opt/eximmon/eximmon start
+Restart=always
+RestartSec=10
+
+# Logging
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=eximmon
+
+# Security
+NoNewPrivileges=false
+
+[Install]
+WantedBy=multi-user.target

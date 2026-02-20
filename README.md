@@ -17,13 +17,53 @@ Before starting, please go through this steps to limit the number of emails allo
 
 [https://documentation.cpanel.net/display/CKB/How+to+Prevent+Spam+with+Mail+Limiting+Features](https://documentation.cpanel.net/display/CKB/How+to+Prevent+Spam+with+Mail+Limiting+Features)
 
+## Installation (Systemd - Recommended)
+
+### 1. Build for Linux
+```bash
+make build-linux
+```
+
+### 2. Install (as root)
+```bash
+sudo make install
+```
+
+### 3. Setup config (first time only)
+```bash
+cd /opt/eximmon
+API_TOKEN=xxxxx \
+TELEGRAM_BOT_TOKEN=xxx \
+TELEGRAM_ADMIN_IDS=123456 \
+./eximmon start
+# Press Ctrl+C after config is saved
+```
+
+### 4. Start the service
+```bash
+systemctl start eximmon
+systemctl status eximmon
+```
+
+### Useful Commands
+```bash
+systemctl status eximmon     # Check status
+systemctl restart eximmon    # Restart service
+systemctl stop eximmon       # Stop service
+journalctl -u eximmon -f     # View live logs
+./eximmon config             # View current config
+./eximmon help               # Show help
+```
+
+## Quick Install (rc.local - Alternative)
+
 * login to whm
 * development > Manage Api Token
 * create an api token, grant "Everything", and copy token (for API_TOKEN)
 * add this to /etc/rc.local (on cpanel as root): replace xxxxx, your-email with your configurations
 
 ```
-cd /root/eximmon && 
+cd /root/eximmon &&
 API_TOKEN=xxxxx NOTIFY_EMAIL=your-email EXIM_LOG=/var/log/exim_mainlog ./eximmon start > out.log &
 ```
 
