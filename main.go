@@ -3,6 +3,7 @@ package main
 import (
 	"bufio"
 	"bytes"
+	"eximmon/bot"
 	"eximmon/exim"
 	"eximmon/tools"
 	"eximmon/whm"
@@ -20,6 +21,7 @@ import (
 
 var configPath = ".config"
 var dataPath = "data/"
+var botEngine *bot.Engine
 
 // date, id, <=, email, extras
 var eximRegLine = regexp.MustCompile("(?i)(\\d{4}-\\d{2}-\\d{2} \\d{2}:\\d{2}:\\d{2}) ([^ ]*) ([^ ]*) .* A=dovecot_[a-zA-z]*:([^ ]*) (.*) for (.*)$")
@@ -33,6 +35,24 @@ func main() {
 		log("Other environments variables: MAX_PER_MIN=8 , MAX_PER_HOUR=100")
 		log("NOTIFY_EMAIL=email , EXIM_LOG=/var/log/exim_mainlog")
 		log("WHM_API_HOST=127.0.0.1")
+		log("PREFER_MODERN_UAPI=true (default: true, set to 'false' to use legacy only)")
+		log("")
+		log("Bot Integration:")
+		log("  TELEGRAM_BOT_TOKEN=xxx")
+		log("  TELEGRAM_ADMIN_IDS=123,456")
+		log("  TELEGRAM_NOTIFY_CHAT_ID=-123")
+		log("  SLACK_BOT_TOKEN=xoxb-xxx")
+		log("  SLACK_ADMIN_IDS=U123,U456")
+		log("  SLACK_NOTIFY_CHANNEL=C123")
+	}
+
+	// Configure UAPI preference (default: true for modern cPanel versions)
+	if os.Getenv("PREFER_MODERN_UAPI") == "false" {
+		whm.PreferModernUAPI = false
+		log("Using legacy WHM proxy API only")
+	} else {
+		whm.PreferModernUAPI = true
+		log("Using modern UAPI with fallback to legacy WHM proxy")
 	}
 
 	maxPerMin := int16(8)
@@ -69,6 +89,20 @@ func main() {
 	}
 
 	whm.Log = log
+
+	// Initialize bot engine
+	bot.Log = log
+	botEngine = bot.NewEngine()
+	if botEngine != nil {
+		if err := botEngine.Start(); err != nil {
+			log("Bot engine error: %v", err)
+		}
+		defer func() {
+			if botEngine != nil {
+				botEngine.Stop()
+			}
+		}()
+	}
 
 	if len(os.Args) < 2 {
 		log("args: start|run|skip|reset|suspend|unsuspend|info|help|test-notify|rerun")
