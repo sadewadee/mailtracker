@@ -15,20 +15,15 @@ Real-time spam detection for cPanel/WHM servers. Automatically monitors Exim mai
 ## Quick Install
 
 ```bash
-# Download latest release
+# Download and extract
 curl -sL https://github.com/sadewadee/mailtracker/releases/latest/download/eximmon-linux-amd64.tar.gz | tar xz
 
-# Install
-chmod +x install.sh && sudo ./install.sh
-
-# Setup config (first time only)
-cd /opt/eximmon
-API_TOKEN=xxxxx TELEGRAM_BOT_TOKEN=xxx TELEGRAM_ADMIN_IDS=123456 ./eximmon start
-# Press Ctrl+C after config saved
+# Run installer (will prompt for config)
+cd eximmon
+sudo ./install.sh
 
 # Start service
 systemctl start eximmon
-systemctl enable eximmon
 ```
 
 ## Requirements

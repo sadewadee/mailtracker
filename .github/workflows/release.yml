@@ -29,15 +29,16 @@ jobs:
 
       - name: Create tarballs
         run: |
-          mkdir -p release
-          cp bin/eximmon-linux-amd64 release/eximmon
-          cp eximmon.service install.sh release/
-          tar -czvf eximmon-linux-amd64.tar.gz -C release .
+          mkdir -p eximmon
+          cp bin/eximmon-linux-amd64 eximmon/eximmon
+          cp eximmon.service install.sh eximmon/
+          tar -czvf eximmon-linux-amd64.tar.gz eximmon
 
-          mkdir -p release-arm
-          cp bin/eximmon-linux-arm64 release-arm/eximmon
-          cp eximmon.service install.sh release-arm/
-          tar -czvf eximmon-linux-arm64.tar.gz -C release-arm .
+          rm -rf eximmon
+          mkdir -p eximmon
+          cp bin/eximmon-linux-arm64 eximmon/eximmon
+          cp eximmon.service install.sh eximmon/
+          tar -czvf eximmon-linux-arm64.tar.gz eximmon
 
       - name: Release
         uses: softprops/action-gh-release@v1
