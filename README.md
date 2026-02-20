@@ -44,6 +44,63 @@ tail -f /root/eximmon/out.log
 * NOTIFY_EMAIL=email
 * EXIM_LOG=/var/log/exim_mainlog
 * WHM_API_HOST=node.servername.com
+* PREFER_MODERN_UAPI=true (default: true, set to 'false' to use legacy WHM proxy only)
+
+## API Support
+
+This tool supports both modern UAPI and legacy WHM proxy methods:
+
+| Method | Port | Endpoint | Auth Header |
+|--------|------|----------|-------------|
+| Modern UAPI (preferred) | 2083 | `/execute/Email/suspend_outgoing` | `cpanel username:TOKEN` |
+| Legacy WHM Proxy | 2087 | `/json-api/cpanel?cpanel_jsonapi_...` | `whm root:TOKEN` |
+
+By default, the tool tries modern UAPI first and falls back to legacy WHM proxy if needed. This ensures compatibility with:
+- cPanel/WHM v122.x.x and newer (uses modern UAPI)
+- Older cPanel/WHM versions (uses legacy fallback)
+
+## Bot Integration
+
+Eximmon supports Telegram and Slack bot integration for real-time notifications and remote control.
+
+### Setup
+
+#### Telegram
+1. Create a bot via [@BotFather](https://t.me/botfather) and get the token
+2. Get your user ID by messaging [@userinfobot](https://t.me/userinfobot)
+3. (Optional) Create a group/channel for notifications and add the bot
+
+#### Slack
+1. Create a Slack App with Bot User
+2. Install to workspace and get Bot User OAuth Token
+3. (Optional) Create a channel for notifications and invite the bot
+
+### Environment Variables
+
+```bash
+# Telegram
+TELEGRAM_BOT_TOKEN=123456:ABC-DEF
+TELEGRAM_ADMIN_IDS=123456789,987654321
+TELEGRAM_NOTIFY_CHAT_ID=-100123456789
+
+# Slack
+SLACK_BOT_TOKEN=xoxb-123456-abcdef
+SLACK_ADMIN_IDS=U12345,U67890
+SLACK_NOTIFY_CHANNEL=C12345
+```
+
+### Available Commands
+
+| Command | Description | Admin Only |
+|---------|-------------|------------|
+| `/status` | Check eximmon status | No |
+| `/suspend <email>` | Suspend email | Yes |
+| `/unsuspend <email>` | Unsuspend email | Yes |
+| `/list` | List suspended emails | No |
+| `/stats <email|domain>` | View statistics | No |
+| `/config` | View configuration | No |
+| `/set <key> <value>` | Update threshold | Yes |
+| `/whitelist add/remove/list` | Manage whitelist | Yes |
 
 ## Available command
 
