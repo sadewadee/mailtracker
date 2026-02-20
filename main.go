@@ -712,7 +712,7 @@ func MustSize(path string) int64 {
 }
 
 func log(msg string, args ...interface{}) {
-	fmt.Printf("eximmon(v1.2.0):"+msg+"\n", args...)
+	fmt.Printf("eximmon(v1.3.0):"+msg+"\n", args...)
 }
 
 // maskToken masks sensitive tokens for display (shows first 4 and last 4 chars)
