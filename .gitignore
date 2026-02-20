@@ -2,3 +2,4 @@ exim_mainlog
 data/
 .config
 .eximmon.conf
+bin/

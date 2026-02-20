@@ -1,0 +1,45 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.22'
+
+      - name: Build Linux AMD64
+        run: |
+          GOOS=linux GOARCH=amd64 go build -ldflags="-s -w" -o bin/eximmon-linux-amd64 main.go config.go
+
+      - name: Build Linux ARM64
+        run: |
+          GOOS=linux GOARCH=arm64 go build -ldflags="-s -w" -o bin/eximmon-linux-arm64 main.go config.go
+
+      - name: Create tarballs
+        run: |
+          cd bin
+          tar -czvf eximmon-linux-amd64.tar.gz eximmon-linux-amd64
+          tar -czvf eximmon-linux-arm64.tar.gz eximmon-linux-arm64
+
+      - name: Release
+        uses: softprops/action-gh-release@v1
+        with:
+          files: |
+            bin/eximmon-linux-amd64.tar.gz
+            bin/eximmon-linux-arm64.tar.gz
+            eximmon.service
+            install.sh
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

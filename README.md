@@ -6,6 +6,24 @@ Created to detect malware / virus infected / hacked email accounts that attempt 
 It costed me multiple time, but biggest was USD 90+ on mailgun with 197k of spam emails being billed upon me.
 I couldn't wait any longer. Please join me to maintain this :)
 
+## Quick Install (Download Binary)
+
+```bash
+# Download latest release
+curl -sL https://github.com/u007/eximmon/releases/latest/download/eximmon-linux-amd64.tar.gz | tar xz
+
+# Run installer
+chmod +x install.sh && sudo ./install.sh
+
+# Setup config (first time only)
+cd /opt/eximmon
+API_TOKEN=xxxxx TELEGRAM_BOT_TOKEN=xxx TELEGRAM_ADMIN_IDS=123456 ./eximmon start
+# Press Ctrl+C after config saved
+
+# Start service
+systemctl start eximmon
+```
+
 # How it works?
 
 It scans /var/log/exim_mainlog on interval basis, and logs all email activity being received from authenticated user.
