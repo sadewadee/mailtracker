@@ -22,6 +22,7 @@ import (
 var configPath = ".config"
 var dataPath = "data/"
 var botEngine *bot.Engine
+var debugMode = false
 
 // date, id, <=, email, extras
 var eximRegLine = regexp.MustCompile("(?i)(\\d{4}-\\d{2}-\\d{2} \\d{2}:\\d{2}:\\d{2}) ([^ ]*) ([^ ]*) .* A=dovecot_[a-zA-z]*:([^ ]*) (.*) for (.*)$")
@@ -78,6 +79,12 @@ func main() {
 	} else {
 		whm.PreferModernUAPI = true
 		log("Using modern UAPI with fallback to legacy WHM proxy")
+	}
+
+	// Debug mode
+	if os.Getenv("DEBUG") == "true" {
+		debugMode = true
+		log("Debug mode enabled")
 	}
 
 	maxPerMin := int16(8)
@@ -276,7 +283,7 @@ func main() {
 
 func cleanupFrom(thetime time.Time) error {
 	t := thetime
-	log("cleaningFrom: %v", t.Format(time.RFC3339))
+	log("Cleaning data from: %v", t.Format(time.RFC3339))
 	d, err := os.Open(dataPath)
 	if err != nil {
 		return err
@@ -288,7 +295,7 @@ func cleanupFrom(thetime time.Time) error {
 	}
 	for _, name := range names {
 		ownerDir := filepath.Join(dataPath, name)
-		log("scanning: %+v", ownerDir)
+		debugLog("scanning: %+v", ownerDir)
 
 		d, err := os.Open(ownerDir)
 		if err != nil {
@@ -309,14 +316,14 @@ func cleanupFrom(thetime time.Time) error {
 			}
 
 			if !t.After(dirtime) {
-				log("removing: %+v", dateDir)
+				debugLog("removing: %+v", dateDir)
 
 				err = os.RemoveAll(dateDir)
 				if err != nil {
 					return err
 				}
 			} else {
-				log("not removing: %+v", dateDir)
+				debugLog("not removing: %+v", dateDir)
 			}
 
 		} //each date
@@ -335,7 +342,7 @@ func emailDomainName(email string) (string, error) {
 	}
 
 	domain := trimmedEmail[lastPos+1:]
-	log("domain %s, email: %s", domain, email)
+	debugLog("domain %s, email: %s", domain, email)
 
 	return domain, nil
 }
@@ -418,11 +425,11 @@ func eximLogScanner(logFile string, startTime time.Time, maxPerMin int16, maxPer
 
 	for {
 		text = scanner.Text()
-		log("raw line %d: %v", lineNo, text)
+		debugLog("raw line %d: %v", lineNo, text)
 		res := eximRegLine.FindStringSubmatch(text)
 		if len(res) < 5 {
 			if strings.Contains(text, "A=dovecot") {
-				log("Not: %#v | %v", res, text)
+				debugLog("Not: %#v | %v", res, text)
 				time.Sleep(100 * time.Millisecond)
 			}
 		} else {
@@ -442,13 +449,9 @@ func eximLogScanner(logFile string, startTime time.Time, maxPerMin int16, maxPer
 				}
 				if !startTime.IsZero() {
 					if thetime.Before(startTime) {
-						log("Skipping by time %s expected %s", thetime.Format(time.RFC3339), startTime.Format(time.RFC3339))
+						debugLog("Skipping by time %s expected %s", thetime.Format(time.RFC3339), startTime.Format(time.RFC3339))
 						skipTime = true
-					} else {
-						// log("ok time %s(%s) after %s", thetime.Format(time.RFC3339), res[1], startTime.Format(time.RFC3339))
 					}
-				} else {
-					log("Start time is zero? %s", startTime.Format(time.RFC3339))
 				}
 
 				if !skipTime && strings.Index(email, "@") > 0 {
@@ -465,15 +468,14 @@ func eximLogScanner(logFile string, startTime time.Time, maxPerMin int16, maxPer
 					for _, rec := range recipients {
 						recipientDomain, err = emailDomainName(rec)
 						if err != nil {
-							log(fmt.Sprintf("unable to obtain domain from email %s, error: %v", err, rec))
-							// return fmt.Errorf("unable to obtain domain from email %s, error: %v", err, recipient)
+							debugLog("unable to obtain domain from email %s, error: %v", err, rec)
 							continue
 						}
 						if senderDomain == recipientDomain {
-							log("detected same domain %s | %s", email, rec)
+							debugLog("detected same domain %s | %s", email, rec)
 							continue
 						}
-						log("detected other domain %s | %s", recipientDomain, rec)
+						debugLog("detected other domain %s | %s", recipientDomain, rec)
 						hasExternal = true
 					}
 
@@ -507,14 +509,10 @@ func eximLogScanner(logFile string, startTime time.Time, maxPerMin int16, maxPer
 						}
 					}
 
-					log("Written %s time: %v, min: %v, hour: %v", email, thetime, minCount, hourCount)
+					log("Counted %s: min=%d, hour=%d", email, minCount, hourCount)
 				} else if !skipTime {
-					log("Ignoring %#v : %#v ||||| '%s' | %s | %s", len(res), res[1:], email, thetime.Format(time.RFC3339), text)
-					time.Sleep(2 * time.Second)
+					debugLog("Ignoring internal email: %s -> %s", email, recipient)
 				}
-				//is <=
-			} else {
-				log("Not regex: %#v | %v", res, text)
 			}
 		}
 		if !scanner.Scan() {
@@ -582,11 +580,11 @@ func mailCountStore(thetime time.Time, email string, hourCount int64, minCount i
 
 	MustDir(datePath)
 
-	log("Writing %s/%s", dirPath, hourFile)
+	debugLog("Writing %s/%s", dirPath, hourFile)
 	if err := ioutil.WriteFile(hourFile, []byte(fmt.Sprintf("%d", hourCount)), 0644); err != nil {
 		return err
 	}
-	log("Writing %s", minFile)
+	debugLog("Writing %s", minFile)
 	if err := ioutil.WriteFile(minFile, []byte(fmt.Sprintf("%d", minCount)), 0644); err != nil {
 		return err
 	}
@@ -691,9 +689,9 @@ func cleanPath(name string) string {
 }
 
 func MustDir(path string) {
-	log("MustDir: %s", path)
+	debugLog("MustDir: %s", path)
 	if _, err := os.Stat(path); os.IsNotExist(err) {
-		log("Creating dir: %s", path)
+		debugLog("Creating dir: %s", path)
 		if err := os.MkdirAll(path, 0744); err != nil {
 			panic(fmt.Errorf("Unable to create %s, error: %+v", path, err))
 		}
@@ -712,7 +710,13 @@ func MustSize(path string) int64 {
 }
 
 func log(msg string, args ...interface{}) {
-	fmt.Printf("eximmon(v1.3.4):"+msg+"\n", args...)
+	fmt.Printf("eximmon(v1.3.5):"+msg+"\n", args...)
+}
+
+func debugLog(msg string, args ...interface{}) {
+	if debugMode {
+		fmt.Printf("eximmon(v1.3.5):"+msg+"\n", args...)
+	}
 }
 
 // maskToken masks sensitive tokens for display (shows first 4 and last 4 chars)
