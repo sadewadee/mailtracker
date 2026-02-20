@@ -11,6 +11,7 @@ Real-time spam detection for cPanel/WHM servers. Automatically monitors Exim mai
 - 🔄 **UAPI fallback** - Compatible with cPanel v122.x.x and older versions
 - 🔐 **Secure config** - Auto-saved with permission 600
 - ⚡ **Systemd service** - Auto-start on boot, auto-restart on crash
+- 🔄 **Self-update** - One command to update to latest version
 
 ## Quick Install
 
@@ -26,6 +27,19 @@ sudo ./install.sh
 systemctl start eximmon
 ```
 
+## Update
+
+```bash
+# One command update (stops service, backups, updates, restarts)
+sudo eximmon update
+```
+
+Or manual update:
+```bash
+curl -sL https://github.com/sadewadee/mailtracker/releases/latest/download/eximmon-linux-amd64.tar.gz | tar xz
+cd eximmon && sudo ./install.sh
+```
+
 ## Requirements
 
 Before starting, configure email rate limits in WHM:
@@ -37,7 +51,7 @@ Before starting, configure email rate limits in WHM:
 
 ## Configuration
 
-Config saved to `.eximmon.conf` (permission: 600). Set once via environment variables:
+Config saved to `/opt/eximmon/.eximmon.conf` (permission: 600). Set via environment variables or installer prompts:
 
 ```bash
 API_TOKEN=xxxxx                      # WHM API token (required)
@@ -47,6 +61,7 @@ WHM_API_HOST=127.0.0.1               # WHM hostname
 MAX_PER_MIN=8                        # Max emails per minute
 MAX_PER_HOUR=100                     # Max emails per hour
 PREFER_MODERN_UAPI=true              # Use modern UAPI first
+DEBUG=false                          # Enable verbose logging
 
 # Telegram Bot
 TELEGRAM_BOT_TOKEN=123456:ABC-DEF
@@ -62,16 +77,17 @@ SLACK_NOTIFY_CHANNEL=C12345
 ## CLI Commands
 
 ```bash
-./eximmon start       # Start monitoring (continuous)
-./eximmon run         # Single run
-./eximmon rerun DATE  # Rerun from specific date
-./eximmon skip        # Skip existing, monitor new only
-./eximmon suspend EMAIL   # Manual suspend
-./eximmon unsuspend EMAIL # Manual unsuspend
-./eximmon info DOMAIN     # Get domain info
-./eximmon config      # Show current config
-./eximmon reset       # Reset all data
-./eximmon help        # Show help
+eximmon start           # Start monitoring (continuous)
+eximmon run             # Single run
+eximmon rerun DATE      # Rerun from specific date
+eximmon skip            # Skip existing, monitor new only
+eximmon suspend EMAIL   # Manual suspend
+eximmon unsuspend EMAIL # Manual unsuspend
+eximmon info DOMAIN     # Get domain info
+eximmon config          # Show current config
+eximmon update          # Update to latest version
+eximmon reset           # Reset all data
+eximmon help            # Show help
 ```
 
 ## Bot Commands
@@ -121,13 +137,18 @@ Auto-fallback from UAPI to legacy if needed.
 
 1. Scans `/var/log/exim_mainlog` continuously (every 15 seconds)
 2. Matches authenticated dovecot login entries
-3. Counts external recipients per email per minute/hour
-4. Suspends accounts exceeding thresholds via WHM API
-5. Sends notification to configured channels
+3. Skips internal emails (same domain sender/recipient)
+4. Counts external recipients per email per minute/hour
+5. Suspends accounts exceeding thresholds via WHM API
+6. Sends notification to configured channels
 
 ## Data Storage
 
+Location: `/opt/eximmon/`
+
 - `.config` - Last scanned position
+- `.eximmon.conf` - Configuration file
+- `backups/` - Binary backups (keeps last 5)
 - `data/<email>/<date>/<hour>` - Hourly counts
 - `data/<email>/<date>/<minute>` - Per-minute counts
 
