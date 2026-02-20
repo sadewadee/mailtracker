@@ -22,14 +22,27 @@ fi
 echo "Creating directory: $INSTALL_DIR"
 mkdir -p "$INSTALL_DIR"
 
-# Copy binary
+# Copy binary (check multiple locations)
 echo "Copying binary..."
-cp bin/eximmon "$INSTALL_DIR/"
+if [ -f "./eximmon" ]; then
+    cp ./eximmon "$INSTALL_DIR/"
+elif [ -f "./bin/eximmon" ]; then
+    cp ./bin/eximmon "$INSTALL_DIR/"
+else
+    echo "Error: eximmon binary not found"
+    echo "Please run this script from the extracted release directory"
+    exit 1
+fi
 chmod +x "$INSTALL_DIR/eximmon"
 
 # Copy service file
-echo "Installing systemd service..."
-cp eximmon.service "$SERVICE_FILE"
+if [ -f "./eximmon.service" ]; then
+    echo "Installing systemd service..."
+    cp ./eximmon.service "$SERVICE_FILE"
+else
+    echo "Error: eximmon.service not found"
+    exit 1
+fi
 
 # Reload systemd
 echo "Reloading systemd daemon..."
@@ -45,7 +58,8 @@ echo ""
 echo "Config file will be created at: $INSTALL_DIR/.eximmon.conf"
 echo ""
 echo "Setup your config (run once):"
-echo "  cd $INSTALL_DIR && API_TOKEN=xxx TELEGRAM_BOT_TOKEN=xxx TELEGRAM_ADMIN_IDS=123 ./eximmon start"
+echo "  cd $INSTALL_DIR"
+echo "  API_TOKEN=xxx TELEGRAM_BOT_TOKEN=xxx TELEGRAM_ADMIN_IDS=123 ./eximmon start"
 echo "  (Press Ctrl+C after config is saved)"
 echo ""
 echo "Then start the service:"
