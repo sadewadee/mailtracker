@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"io"
 	"io/ioutil"
+	"net/http"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -137,7 +138,7 @@ func main() {
 	}
 
 	if len(os.Args) < 2 {
-		log("args: start|run|skip|reset|suspend|unsuspend|info|config|help|test-notify|rerun")
+		log("args: start|run|skip|reset|suspend|unsuspend|info|config|help|test-notify|rerun|update")
 		return
 	}
 
@@ -245,6 +246,13 @@ func main() {
 		log("  SLACK_NOTIFY_CHANNEL: %s", appConfig.SLACK_NOTIFY_CHANNEL)
 		return
 
+	case "update":
+		if err := selfUpdate(); err != nil {
+			log("Update failed: %v", err)
+			os.Exit(1)
+		}
+		return
+
 	case "help":
 		log("start - continue from last position or start from yesterday, and repeats from last position")
 		log("rerun - rerun from specified date")
@@ -255,6 +263,7 @@ func main() {
 		log("unsuspend - unsuspend outgoing email")
 		log("info - get information of a domain")
 		log("config - show current configuration")
+		log("update - download and install latest version")
 		log("test-notify - test send notification mail")
 		log("help - this!")
 		return
@@ -710,12 +719,12 @@ func MustSize(path string) int64 {
 }
 
 func log(msg string, args ...interface{}) {
-	fmt.Printf("eximmon(v1.3.5):"+msg+"\n", args...)
+	fmt.Printf("eximmon(v1.3.7):"+msg+"\n", args...)
 }
 
 func debugLog(msg string, args ...interface{}) {
 	if debugMode {
-		fmt.Printf("eximmon(v1.3.5):"+msg+"\n", args...)
+		fmt.Printf("eximmon(v1.3.7):"+msg+"\n", args...)
 	}
 }
 
@@ -728,4 +737,125 @@ func maskToken(token string) string {
 		return "****"
 	}
 	return token[:4] + "****" + token[len(token)-4:]
+}
+
+// selfUpdate downloads and installs the latest version
+func selfUpdate() error {
+	// Check if running as root
+	if os.Geteuid() != 0 {
+		return fmt.Errorf("Please run as root (sudo ./eximmon update)")
+	}
+
+	installDir := "/opt/eximmon"
+	backupDir := installDir + "/backups"
+	binaryPath := installDir + "/eximmon"
+
+	// Detect architecture
+	arch := "amd64"
+	if strings.Contains(strings.ToLower(os.Getenv("GOARCH")), "arm") {
+		arch = "arm64"
+	}
+
+	downloadURL := fmt.Sprintf("https://github.com/sadewadee/mailtracker/releases/latest/download/eximmon-linux-%s.tar.gz", arch)
+
+	log("Downloading latest version (%s)...", arch)
+
+	// Download tarball
+	resp, err := http.Get(downloadURL)
+	if err != nil {
+		return fmt.Errorf("Failed to download: %v", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != 200 {
+		return fmt.Errorf("Download failed: HTTP %d", resp.StatusCode)
+	}
+
+	// Create temp file
+	tmpDir, err := ioutil.TempDir("", "eximmon-update")
+	if err != nil {
+		return fmt.Errorf("Failed to create temp dir: %v", err)
+	}
+	defer os.RemoveAll(tmpDir)
+
+	tmpFile := tmpDir + "/eximmon.tar.gz"
+	out, err := os.Create(tmpFile)
+	if err != nil {
+		return fmt.Errorf("Failed to create temp file: %v", err)
+	}
+	if _, err := io.Copy(out, resp.Body); err != nil {
+		out.Close()
+		return fmt.Errorf("Failed to save download: %v", err)
+	}
+	out.Close()
+
+	log("Download complete. Extracting...")
+
+	// Extract tarball
+	cmd := exec.Command("tar", "-xzf", tmpFile, "-C", tmpDir)
+	if err := cmd.Run(); err != nil {
+		return fmt.Errorf("Failed to extract: %v", err)
+	}
+
+	// Find extracted binary
+	newBinary := tmpDir + "/eximmon/eximmon"
+	if _, err := os.Stat(newBinary); os.IsNotExist(err) {
+		// Try without subfolder
+		newBinary = tmpDir + "/eximmon"
+		if _, err := os.Stat(newBinary); os.IsNotExist(err) {
+			return fmt.Errorf("Extracted binary not found")
+		}
+	}
+
+	// Stop service if running
+	serviceWasRunning := false
+	if exec.Command("systemctl", "is-active", "--quiet", "eximmon").Run() == nil {
+		serviceWasRunning = true
+		log("Stopping eximmon service...")
+		if err := exec.Command("systemctl", "stop", "eximmon").Run(); err != nil {
+			return fmt.Errorf("Failed to stop service: %v", err)
+		}
+	}
+
+	// Backup existing binary
+	if _, err := os.Stat(binaryPath); err == nil {
+		log("Backing up existing binary...")
+		if err := os.MkdirAll(backupDir, 0755); err != nil {
+			return fmt.Errorf("Failed to create backup dir: %v", err)
+		}
+		backupPath := backupDir + "/eximmon." + time.Now().Format("20060102_150405")
+		if err := exec.Command("cp", binaryPath, backupPath).Run(); err != nil {
+			return fmt.Errorf("Failed to backup: %v", err)
+		}
+		// Keep only last 5 backups
+		exec.Command("sh", "-c", "ls -t "+backupDir+"/eximmon.* 2>/dev/null | tail -n +6 | xargs -r rm -f").Run()
+	}
+
+	// Install new binary
+	log("Installing new version...")
+	if err := exec.Command("cp", newBinary, binaryPath).Run(); err != nil {
+		return fmt.Errorf("Failed to install: %v", err)
+	}
+	exec.Command("chmod", "+x", binaryPath).Run()
+
+	// Restart service if it was running
+	if serviceWasRunning {
+		log("Restarting service...")
+		if err := exec.Command("systemctl", "start", "eximmon").Run(); err != nil {
+			return fmt.Errorf("Failed to restart service: %v", err)
+		}
+		time.Sleep(1 * time.Second)
+		if exec.Command("systemctl", "is-active", "--quiet", "eximmon").Run() == nil {
+			log("Service restarted successfully.")
+		} else {
+			log("Warning: Service failed to start. Check: journalctl -u eximmon -n 20")
+		}
+	}
+
+	// Get new version
+	cmd = exec.Command(binaryPath, "help")
+	cmd.CombinedOutput() // Just to run it once
+
+	log("Update complete! Run 'eximmon config' to verify.")
+	return nil
 }
