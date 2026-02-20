@@ -12,7 +12,7 @@ CONFIG_FILE="$INSTALL_DIR/.eximmon.conf"
 
 echo ""
 echo "╔══════════════════════════════════════════════╗"
-echo "║       Eximmon Installer v1.3.3               ║"
+echo "║       Eximmon Installer v1.3.4               ║"
 echo "║   cPanel/WHM Exim Mail Monitor               ║"
 echo "╚══════════════════════════════════════════════╝"
 echo ""
